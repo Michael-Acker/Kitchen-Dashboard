@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
 import android.widget.LinearLayout
+import com.lifedashboard.tv.data.CalendarListEntry
 import com.lifedashboard.tv.data.CalendarRepo
 import com.lifedashboard.tv.model.CalendarEvent
 import com.lifedashboard.tv.ui.dp
@@ -34,6 +35,13 @@ class FakeCalendarRepo : CalendarRepo {
     override suspend fun beginDeviceFlow(slot: Int): CalendarRepo.DeviceFlowSession =
         throw UnsupportedOperationException()
     override suspend fun pollForToken(slot: Int, deviceCode: String, intervalSec: Long): Boolean = false
+
+    override suspend fun getCalendarList(slot: Int): List<CalendarListEntry> =
+        emptyList()
+
+    override fun getSelectedCalendarIds(slot: Int): Set<String>? = null
+
+    override fun saveSelectedCalendarIds(slot: Int, ids: Set<String>) {}
 
     override suspend fun getUpcomingEvents(): List<CalendarEvent> {
         val today = LocalDate.now()

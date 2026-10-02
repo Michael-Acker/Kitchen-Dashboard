@@ -21,6 +21,9 @@ import androidx.security.crypto.MasterKey
  * - "slot{1,2}_refresh_token"           Google OAuth refresh token
  * - "slot{1,2}_expiry_epoch_ms"         access-token expiry, epoch millis
  * - "slot{1,2}_account_name"            cached Google account display name
+ * - "slot{1,2}_selected_calendars"       calendar ids picked in Settings →
+ *                                       Google Calendar → Calendars (empty /
+ *                                       absent = primary calendar only)
  * - "parcel_username" / "parcel_password" Parcel Pending login credentials
  */
 class TokenStore(context: Context) {
@@ -114,6 +117,26 @@ class TokenStore(context: Context) {
             .remove(slotKey(slot, KEY_REFRESH_TOKEN))
             .remove(slotKey(slot, KEY_EXPIRY))
             .remove(slotKey(slot, KEY_ACCOUNT_NAME))
+            .remove(slotKey(slot, KEY_SELECTED_CALENDARS))
+            .apply()
+    }
+
+    // ------------------------------------------------------------------
+    // Per-slot calendar selection (Settings → Google Calendar → Calendars)
+    // ------------------------------------------------------------------
+
+    /**
+     * Calendar ids the user checked for this slot, or null when never
+     * picked (meaning: primary calendar only). A defensive copy — the
+     * SharedPreferences string-set must never escape mutable.
+     */
+    fun getSelectedCalendarIds(slot: Int): Set<String>? =
+        prefs.getStringSet(slotKey(slot, KEY_SELECTED_CALENDARS), null)?.toSet()
+
+    /** Persists the picker selection. An empty set means primary only. */
+    fun saveSelectedCalendarIds(slot: Int, ids: Set<String>) {
+        prefs.edit()
+            .putStringSet(slotKey(slot, KEY_SELECTED_CALENDARS), ids.toSet())
             .apply()
     }
 
@@ -156,6 +179,7 @@ class TokenStore(context: Context) {
         private const val KEY_REFRESH_TOKEN = "refresh_token"
         private const val KEY_EXPIRY = "expiry_epoch_ms"
         private const val KEY_ACCOUNT_NAME = "account_name"
+        private const val KEY_SELECTED_CALENDARS = "selected_calendars"
 
         private const val KEY_PARCEL_USERNAME = "parcel_username"
         private const val KEY_PARCEL_PASSWORD = "parcel_password"

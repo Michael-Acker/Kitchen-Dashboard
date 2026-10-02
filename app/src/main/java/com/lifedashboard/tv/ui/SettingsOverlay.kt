@@ -19,6 +19,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.lifedashboard.tv.data.CalendarRepo
 import com.lifedashboard.tv.data.CalendarRepository
+import com.lifedashboard.tv.data.CalendarListEntry
+import com.lifedashboard.tv.data.CalendarSelection
 import com.lifedashboard.tv.data.ParcelRepo
 import com.lifedashboard.tv.data.ParcelRepository
 import com.lifedashboard.tv.data.UpdateManager
@@ -70,6 +72,16 @@ class SettingsOverlay(
 
     private var currentView = "root"
     private var firstFocusable: View? = null
+
+    // ---- calendar picker state (Settings → Google Calendar → Calendars) ----
+    /** Which account slot the picker is showing (1 or 2). */
+    private var pickerSlot = 1
+    /** Live calendarList entries; null while loading. */
+    private var pickerEntries: List<CalendarListEntry>? = null
+    /** Non-null when the list failed to load. */
+    private var pickerError: String? = null
+    /** Ids currently checked in the picker. */
+    private val pickerChecked = mutableSetOf<String>()
 
     private val backCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
@@ -210,6 +222,7 @@ class SettingsOverlay(
             "themes" -> themesView()
             "widgets" -> widgetsView()
             "calendar" -> calendarView()
+            "calendarPicker" -> calendarPickerView()
             "parcel" -> parcelView()
             "updates" -> updatesView()
             "diagnostics" -> {
@@ -229,8 +242,15 @@ class SettingsOverlay(
      * Panel header: optional Back button, title + subtitle, Close button.
      * [body] goes below the header. The first focusable view added (via
      * noteFirstFocusable or the back button) gets focus when shown.
+     * [onBack] overrides where Back goes; the default returns to the root menu.
      */
-    private fun chrome(title: String, subtitle: String, showBack: Boolean, body: View): LinearLayout {
+    private fun chrome(
+        title: String,
+        subtitle: String,
+        showBack: Boolean,
+        body: View,
+        onBack: (() -> Unit)? = null
+    ): LinearLayout {
         val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
         val head = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -238,7 +258,7 @@ class SettingsOverlay(
         }
         if (showBack) {
             val back = themedButton(ctx, palette, "‹ Back").apply {
-                setOnClickListener { showView("root") }
+                setOnClickListener { onBack?.invoke() ?: showView("root") }
             }
             head.addView(back)
             noteFirstFocusable(back)
@@ -521,13 +541,167 @@ class SettingsOverlay(
                 })
             }
             list.addView(row)
+            if (linked) {
+                val selected = runCatching { calendarRepo.getSelectedCalendarIds(slot) }
+                    .getOrNull()
+                val meta = if (selected.isNullOrEmpty()) "Primary only"
+                    else "${selected.size} selected"
+                val calRow = menuRow(
+                    "Calendars",
+                    "Choose which of this account's calendars appear",
+                    meta = meta
+                )
+                calRow.setOnClickListener {
+                    pickerSlot = slot
+                    pickerEntries = null
+                    pickerError = null
+                    pickerChecked.clear()
+                    showView("calendarPicker")
+                }
+                list.addView(calRow)
+            }
         }
         if (!calendarRepo.googleConfigured()) {
             list.addView(mutedView(ctx, palette, "Save a client ID and secret above to enable Sign in.", 12f).apply {
                 setPadding(0, ctx.dp(8), 0, 0)
             })
         }
-        return chrome("Google Calendar", "Link up to two Google accounts.", showBack = true, body = list)
+        // Account rows plus the new Calendars rows can outgrow the panel:
+        // scroll like the theme list so every row stays reachable.
+        val scroll = ScrollView(ctx).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, ctx.dp(440))
+        }
+        scroll.addView(list)
+        return chrome("Google Calendar", "Link up to two Google accounts, then pick which calendars to show.", showBack = true, body = scroll)
+    }
+
+    // ---- calendar picker (Settings → Google Calendar → Calendars) ----
+
+    private fun calendarPickerView(): LinearLayout {
+        val accountLabel = runCatching { calendarRepo.accountName(pickerSlot) }
+            .getOrNull() ?: "Account $pickerSlot"
+        val body = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+
+        val entries = pickerEntries
+        when {
+            pickerError != null -> {
+                body.addView(mutedView(ctx, palette, "Couldn't load calendars: $pickerError", 14f))
+                body.addView(rowGap())
+                body.addView(themedButton(ctx, palette, "Retry").apply {
+                    setOnClickListener {
+                        pickerEntries = null
+                        pickerError = null
+                        showView("calendarPicker")
+                    }
+                })
+            }
+            entries == null -> {
+                body.addView(mutedView(ctx, palette, "Loading calendars…", 14f))
+                // Fetch once; rebuild this view when the list lands.
+                activity.lifecycleScope.launch {
+                    try {
+                        val fresh = calendarRepo.getCalendarList(pickerSlot)
+                        val saved = calendarRepo.getSelectedCalendarIds(pickerSlot)
+                        pickerEntries = fresh
+                        pickerChecked.clear()
+                        pickerChecked += saved?.takeIf { it.isNotEmpty() }
+                            ?: CalendarSelection.resolveIdsToFetch(null, fresh)
+                    } catch (e: Exception) {
+                        pickerError = e.message ?: "unknown error"
+                    }
+                    if (currentView == "calendarPicker") showView("calendarPicker")
+                }
+            }
+            entries.isEmpty() -> {
+                body.addView(mutedView(ctx, palette, "No calendars found on this account.", 14f))
+            }
+            else -> {
+                // Fixed-height scroll like the theme list (the panel itself
+                // is WRAP_CONTENT, so a weighted scroll would collapse to 0).
+                val scroll = ScrollView(ctx).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, ctx.dp(440))
+                }
+                val rows = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+                entries.forEach { rows.addView(pickerRow(it)) }
+                scroll.addView(rows)
+                body.addView(scroll)
+                body.addView(rowGap())
+                val buttons = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.END
+                }
+                buttons.addView(themedButton(ctx, palette, "Cancel").apply {
+                    setOnClickListener { showView("calendar") }
+                })
+                buttons.addView(View(ctx).apply {
+                    layoutParams = LinearLayout.LayoutParams(ctx.dp(12), 1)
+                })
+                buttons.addView(themedButton(ctx, palette, "Save").apply {
+                    setOnClickListener {
+                        val ids = pickerChecked.toSet()
+                        // Unchecking everything falls back to primary only,
+                        // matching the pre-picker behavior.
+                        calendarRepo.saveSelectedCalendarIds(
+                            pickerSlot,
+                            ids.ifEmpty {
+                                CalendarSelection.resolveIdsToFetch(null, entries).toSet()
+                            }
+                        )
+                        onChanged(SettingsChange.CALENDAR_AUTH)
+                        showView("calendar")
+                    }
+                })
+                body.addView(buttons)
+            }
+        }
+
+        return chrome(
+            "Calendars",
+            "$accountLabel — only checked calendars appear on the dashboard",
+            showBack = true,
+            body = body,
+            onBack = { showView("calendar") }
+        )
+    }
+
+    private fun pickerRow(entry: CalendarListEntry): LinearLayout {
+        val row = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            padDp(14, 10, 14, 10)
+            makeFocusable(palette, palette.surfaceVariant)
+        }
+        // Google's own per-calendar color, as in the Calendar app; a bad
+        // value falls back to secondary text rather than crashing.
+        val swatch = runCatching {
+            android.graphics.Color.parseColor(entry.backgroundColor)
+        }.getOrNull() ?: palette.textSecondary
+        row.addView(dotView(ctx, swatch, 14))
+        val textBlock = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        textBlock.addView(bodyView(ctx, palette, entry.summary, 15f, bold = true))
+        if (entry.primary) {
+            textBlock.addView(mutedView(ctx, palette, "Primary calendar", 12f))
+        }
+        row.addView(
+            textBlock,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                leftMargin = ctx.dp(12)
+            }
+        )
+        val toggle = Switch(ctx).apply {
+            isChecked = entry.id in pickerChecked
+            isFocusable = false
+            isClickable = false
+        }
+        row.addView(toggle)
+        row.setOnClickListener {
+            if (entry.id in pickerChecked) pickerChecked.remove(entry.id)
+            else pickerChecked.add(entry.id)
+            toggle.isChecked = entry.id in pickerChecked
+        }
+        return row
     }
 
     // ---- app updates ----------------------------------------------------------

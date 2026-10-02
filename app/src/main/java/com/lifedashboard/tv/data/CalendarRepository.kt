@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import com.lifedashboard.tv.util.AppLog
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -162,12 +163,19 @@ class CalendarRepository(private val context: Context) : CalendarRepo {
 
     /**
      * Events in the displayed week (previous Sunday .. next Sunday) from
-     * both linked slots, merged and sorted by start. Window-anchored so
-     * past events in the week are included.
+     * every selected calendar of both linked slots, merged and sorted by
+     * start. Window-anchored so past events in the week are included.
+     *
+     * One failing calendar (deleted, sharing revoked, 404) is skipped and
+     * logged rather than failing the whole refresh — but if NOTHING could
+     * be fetched, the last error is rethrown so the widget keeps its honest
+     * error state instead of showing a misleading empty week.
      */
     override suspend fun getUpcomingEvents(): List<com.lifedashboard.tv.model.CalendarEvent> =
         withContext(Dispatchers.IO) {
             val merged = ArrayList<com.lifedashboard.tv.model.CalendarEvent>()
+            var anyCalendarOk = false
+            var lastError: IOException? = null
             for (slot in 1..2) {
                 if (!isLinked(slot)) continue
                 val token = getValidAccessToken(slot) ?: continue
@@ -175,13 +183,51 @@ class CalendarRepository(private val context: Context) : CalendarRepo {
                     ?: store.getAccountName(slot)
                     ?: "Account $slot"
                 store.saveAccountName(slot, accountName)
-                merged += fetchEvents(token, slot.toString(), accountName)
+                val calendarIds = CalendarSelection.resolveIdsToFetch(
+                    store.getSelectedCalendarIds(slot)
+                )
+                for (calendarId in calendarIds) {
+                    try {
+                        merged += fetchEvents(token, slot.toString(), accountName, calendarId)
+                        anyCalendarOk = true
+                    } catch (e: IOException) {
+                        lastError = e
+                        AppLog.log(
+                            "Calendar",
+                            "slot $slot calendar $calendarId failed: ${e.message}"
+                        )
+                    }
+                }
             }
+            if (!anyCalendarOk) throw lastError ?: IOException("Calendar fetch failed")
             merged.sortBy { it.start }
             merged
         }
 
     override fun unlink(slot: Int) = store.clearSlot(slot)
+
+    /**
+     * The account's calendar list for the Settings picker.
+     * Throws IOException when the slot isn't linked or Google rejects the call.
+     */
+    override suspend fun getCalendarList(slot: Int): List<CalendarListEntry> =
+        withContext(Dispatchers.IO) {
+            val token = getValidAccessToken(slot)
+                ?: throw IOException("Account $slot is not linked.")
+            val request = authedGet(CALENDAR_LIST_URL, token)
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw IOException("Calendar list request failed: HTTP ${response.code}")
+                }
+                parseCalendarList(JSONObject(response.body?.string() ?: ""))
+            }
+        }
+
+    override fun getSelectedCalendarIds(slot: Int): Set<String>? =
+        store.getSelectedCalendarIds(slot)
+
+    override fun saveSelectedCalendarIds(slot: Int, ids: Set<String>) =
+        store.saveSelectedCalendarIds(slot, ids)
 
     // ------------------------------------------------------------------
     // Token helpers
@@ -256,25 +302,44 @@ class CalendarRepository(private val context: Context) : CalendarRepo {
         return try {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return null
-                val items = JSONObject(response.body?.string() ?: "")
-                    .optJSONArray("items") ?: return null
-                for (i in 0 until items.length()) {
-                    val entry = items.getJSONObject(i)
-                    if (entry.optBoolean("primary", false)) {
-                        return entry.optString("summary", null).takeIf { it.isNotBlank() }
-                    }
-                }
-                null
+                parseCalendarList(JSONObject(response.body?.string() ?: ""))
+                    .firstOrNull { it.primary }?.summary
             }
         } catch (e: IOException) {
             null
         }
     }
 
+    /**
+     * Parses a calendarList response into selectable entries. Deleted
+     * entries and entries without an id are skipped.
+     */
+    private fun parseCalendarList(root: JSONObject): List<CalendarListEntry> {
+        val items = root.optJSONArray("items") ?: return emptyList()
+        val out = ArrayList<CalendarListEntry>(items.length())
+        for (i in 0 until items.length()) {
+            val entry = items.getJSONObject(i)
+            if (entry.optBoolean("deleted", false)) continue
+            val id = entry.optString("id", "").trim()
+            if (id.isEmpty()) continue
+            out += CalendarListEntry(
+                id = id,
+                summary = entry.optString("summary", "").ifBlank { "Untitled" },
+                // "" fallback: optString(key, null) can NPE on missing keys
+                // in some org.json versions; "" is safe everywhere.
+                backgroundColor = entry.optString("backgroundColor", "")
+                    .takeIf { it.isNotBlank() },
+                primary = entry.optBoolean("primary", false)
+            )
+        }
+        return out
+    }
+
     private fun fetchEvents(
         bearerToken: String,
         accountId: String,
-        accountName: String
+        accountName: String,
+        calendarId: String
     ): List<com.lifedashboard.tv.model.CalendarEvent> {
         // Anchor the fetch to the displayed week (previous Sunday .. next
         // Sunday), not to "now", so the whole week — including events that
@@ -290,7 +355,7 @@ class CalendarRepository(private val context: Context) : CalendarRepo {
             CalendarWindow.fetchEnd(today, zone).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
             Charsets.UTF_8.name()
         )
-        val url = "$EVENTS_URL?timeMin=$timeMin&timeMax=$timeMax&singleEvents=true&orderBy=startTime&maxResults=100"
+        val url = CalendarSelection.eventsUrl(calendarId, timeMin, timeMax)
         val request = authedGet(url, bearerToken)
         return try {
             client.newCall(request).execute().use { response ->
@@ -395,8 +460,6 @@ class CalendarRepository(private val context: Context) : CalendarRepo {
         private const val TOKEN_URL = "https://oauth2.googleapis.com/token"
         private const val CALENDAR_LIST_URL =
             "https://www.googleapis.com/calendar/v3/users/me/calendarList"
-        private const val EVENTS_URL =
-            "https://www.googleapis.com/calendar/v3/calendars/primary/events"
         private const val SCOPE_CALENDAR_READONLY =
             "https://www.googleapis.com/auth/calendar.readonly"
         private const val GRANT_TYPE_DEVICE_CODE =

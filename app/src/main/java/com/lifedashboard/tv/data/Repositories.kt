@@ -73,6 +73,22 @@ interface CalendarRepo {
     /** Upcoming events merged from both linked accounts, sorted by start time. */
     suspend fun getUpcomingEvents(): List<CalendarEvent>
 
+    /**
+     * The account's calendars from Google's calendarList (id, display name,
+     * Google color, primary flag), for the Settings picker. Throws
+     * IOException when the slot isn't linked or the list can't be read.
+     */
+    suspend fun getCalendarList(slot: Int): List<CalendarListEntry>
+
+    /**
+     * Calendar ids picked in Settings for this slot, or null when never
+     * picked — which means primary calendar only (the pre-picker behavior).
+     */
+    fun getSelectedCalendarIds(slot: Int): Set<String>?
+
+    /** Persists the Settings picker selection. An empty set = primary only. */
+    fun saveSelectedCalendarIds(slot: Int, ids: Set<String>)
+
     fun unlink(slot: Int)
 }
 

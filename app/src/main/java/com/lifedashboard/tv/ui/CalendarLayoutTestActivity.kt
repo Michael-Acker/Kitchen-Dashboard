@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import com.lifedashboard.tv.data.CalendarListEntry
 import com.lifedashboard.tv.data.CalendarRepo
 import com.lifedashboard.tv.data.CalendarWindow
 import com.lifedashboard.tv.model.CalendarEvent
@@ -83,6 +84,10 @@ class CalendarLayoutTestActivity : Activity() {
                 throw UnsupportedOperationException()
             override suspend fun getUpcomingEvents(): List<CalendarEvent> =
                 throw UnsupportedOperationException()
+            override suspend fun getCalendarList(slot: Int): List<CalendarListEntry> =
+                emptyList()
+            override fun getSelectedCalendarIds(slot: Int): Set<String>? = null
+            override fun saveSelectedCalendarIds(slot: Int, ids: Set<String>) {}
             override fun unlink(slot: Int) {}
         }
 
