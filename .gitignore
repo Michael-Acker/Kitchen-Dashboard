@@ -1,0 +1,17 @@
+# === Secrets — never commit ===
+# Release signing keystore and its passwords live outside this repo.
+keystore/
+*.jks
+*.keystore
+*.p12
+*.pfx
+local.properties
+
+# === Build outputs & caches ===
+.gradle/
+app/build/
+build/
+out/
+
+# === Design scratch (working files, not part of the shipped project) ===
+icon-work/

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Kitchen Dashboard</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_subtitle">Adjust this dashboard.</string>
+    <string name="menu_themes">Themes</string>
+    <string name="menu_themes_sub">Pick your palette</string>
+    <string name="menu_widgets">Widgets</string>
+    <string name="menu_widgets_sub">Choose what appears</string>
+    <string name="menu_calendar">Google Calendar</string>
+    <string name="menu_calendar_sub">OAuth client ID + account linking</string>
+    <string name="menu_parcel">Parcel Pending</string>
+    <string name="menu_parcel_sub">Delivery login</string>
+    <string name="action_save">Save</string>
+    <string name="action_clear">Clear</string>
+    <string name="action_close">Close</string>
+    <string name="action_back">Back</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_sign_in">Sign in</string>
+    <string name="action_unlink">Unlink</string>
+    <string name="action_open_settings">Open Settings</string>
+</resources>

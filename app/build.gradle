@@ -1,0 +1,70 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.lifedashboard.tv'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.lifedashboard.tv'
+        minSdk 23
+        targetSdk 34
+        versionCode 2
+        versionName '1.1'
+    }
+
+    // Release signing. In-app updates only preserve app data (OAuth tokens,
+    // settings) when every build uses the SAME applicationId AND the SAME
+    // signing certificate — so this keystore must be created once and kept
+    // forever. Create it with:
+    //   keytool -genkeypair -v -keystore keystore/lifedashboard.jks \
+    //     -alias lifedashboard -keyalg RSA -keysize 2048 -validity 10000
+    // Put the passwords in gradle.properties (never commit them):
+    //   lifedashboard.keystore.password=...
+    //   lifedashboard.key.password=...
+    // or export LIFEDASHBOARD_KEYSTORE_PASSWORD / LIFEDASHBOARD_KEY_PASSWORD.
+    // Until keystore/lifedashboard.jks exists, release builds fall back to
+    // the standard debug signature.
+    signingConfigs {
+        lifedashboard {
+            storeFile file("$rootDir/keystore/lifedashboard.jks")
+            storePassword project.findProperty('lifedashboard.keystore.password') ?: System.getenv('LIFEDASHBOARD_KEYSTORE_PASSWORD')
+            keyAlias 'lifedashboard'
+            keyPassword project.findProperty('lifedashboard.key.password') ?: System.getenv('LIFEDASHBOARD_KEY_PASSWORD')
+        }
+    }
+
+    buildTypes {
+        debug {}
+        release {
+            minifyEnabled false
+            if (file("$rootDir/keystore/lifedashboard.jks").exists()) {
+                signingConfig signingConfigs.lifedashboard
+            }
+        }
+    }
+
+    compileOptions {
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.6'
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.squareup.okhttp3:okhttp-urlconnection:4.12.0'
+    implementation 'org.jsoup:jsoup:1.17.2'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
+}
