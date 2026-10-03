@@ -91,4 +91,21 @@ object CalendarSelection {
         if (raw == null) return null
         return raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
     }
+
+    /**
+     * Applies one picker toggle to the checked set. Unchecking the last
+     * checked calendar falls back to the primary id, so the set is never
+     * empty (the dashboard treats empty as primary-only anyway, but the
+     * picker UI always shows the effective state).
+     */
+    fun toggleChecked(
+        checked: Set<String>,
+        id: String,
+        primaryId: String?
+    ): Set<String> {
+        val next = checked.toMutableSet()
+        if (id in next) next.remove(id) else next.add(id)
+        if (next.isEmpty() && primaryId != null) next.add(primaryId)
+        return next
+    }
 }

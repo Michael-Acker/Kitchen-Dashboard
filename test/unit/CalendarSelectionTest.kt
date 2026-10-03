@@ -141,6 +141,30 @@ fun main() {
         ) == setOf("en.usa#holiday@group.v.calendar.google.com")
     )
 
+    // --- toggleChecked: tap toggles, never empty, primary fallback ---
+    // (2026-10-02: the picker saves on every tap — the old Save button was
+    // clipped off-screen on 1080p Fire TVs, so toggles could never persist.)
+    check(
+        "tapping an unchecked calendar checks it",
+        CalendarSelection.toggleChecked(setOf("p"), "f", "p") == setOf("p", "f")
+    )
+    check(
+        "tapping a checked calendar unchecks it",
+        CalendarSelection.toggleChecked(setOf("p", "f"), "f", "p") == setOf("p")
+    )
+    check(
+        "unchecking the last calendar falls back to primary",
+        CalendarSelection.toggleChecked(setOf("f"), "f", "p") == setOf("p")
+    )
+    check(
+        "unchecking primary when it is the only one keeps it checked",
+        CalendarSelection.toggleChecked(setOf("p"), "p", "p") == setOf("p")
+    )
+    check(
+        "no primary id and empty result stays empty (resolves downstream)",
+        CalendarSelection.toggleChecked(setOf("f"), "f", null).isEmpty()
+    )
+
     if (failures > 0) {
         println("$failures FAILURE(S)")
         kotlin.system.exitProcess(1)

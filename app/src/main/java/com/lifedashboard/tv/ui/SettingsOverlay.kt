@@ -82,6 +82,8 @@ class SettingsOverlay(
     private var pickerError: String? = null
     /** Ids currently checked in the picker. */
     private val pickerChecked = mutableSetOf<String>()
+    /** Row switches by calendar id, refreshed after the primary fallback. */
+    private val pickerToggles = mutableMapOf<String, Switch>()
 
     private val backCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
@@ -556,6 +558,7 @@ class SettingsOverlay(
                     pickerEntries = null
                     pickerError = null
                     pickerChecked.clear()
+                    pickerToggles.clear()
                     showView("calendarPicker")
                 }
                 list.addView(calRow)
@@ -619,47 +622,25 @@ class SettingsOverlay(
             else -> {
                 // Fixed-height scroll like the theme list (the panel itself
                 // is WRAP_CONTENT, so a weighted scroll would collapse to 0).
+                // 400dp keeps the whole panel on a 1080p Fire TV (@320dpi is
+                // ~540dp tall) — the old 440dp + Save/Cancel buttons below it
+                // overflowed the screen and the buttons were clipped away,
+                // which is why the picker now saves on every tap instead of
+                // needing a Save button (2026-10-02).
                 val scroll = ScrollView(ctx).apply {
                     layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT, ctx.dp(440))
+                        LinearLayout.LayoutParams.MATCH_PARENT, ctx.dp(400))
                 }
                 val rows = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
                 entries.forEach { rows.addView(pickerRow(it)) }
                 scroll.addView(rows)
                 body.addView(scroll)
-                body.addView(rowGap())
-                val buttons = LinearLayout(ctx).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.END
-                }
-                buttons.addView(themedButton(ctx, palette, "Cancel").apply {
-                    setOnClickListener { showView("calendar") }
-                })
-                buttons.addView(View(ctx).apply {
-                    layoutParams = LinearLayout.LayoutParams(ctx.dp(12), 1)
-                })
-                buttons.addView(themedButton(ctx, palette, "Save").apply {
-                    setOnClickListener {
-                        val ids = pickerChecked.toSet()
-                        // Unchecking everything falls back to primary only,
-                        // matching the pre-picker behavior.
-                        calendarRepo.saveSelectedCalendarIds(
-                            pickerSlot,
-                            ids.ifEmpty {
-                                CalendarSelection.resolveIdsToFetch(null, entries).toSet()
-                            }
-                        )
-                        onChanged(SettingsChange.CALENDAR_AUTH)
-                        showView("calendar")
-                    }
-                })
-                body.addView(buttons)
             }
         }
 
         return chrome(
             "Calendars",
-            "$accountLabel — only checked calendars appear on the dashboard",
+            "$accountLabel — tap to toggle; changes apply immediately",
             showBack = true,
             body = body,
             onBack = { showView("calendar") }
@@ -696,10 +677,19 @@ class SettingsOverlay(
             isClickable = false
         }
         row.addView(toggle)
+        pickerToggles[entry.id] = toggle
         row.setOnClickListener {
-            if (entry.id in pickerChecked) pickerChecked.remove(entry.id)
-            else pickerChecked.add(entry.id)
-            toggle.isChecked = entry.id in pickerChecked
+            // Immediate save on every tap — like the theme and widget
+            // pickers. (The picker once had Cancel/Save buttons below the
+            // list, but on 1080p Fire TVs the panel overflowed the screen
+            // and the buttons were clipped away, so toggles could never be
+            // saved. 2026-10-02.)
+            val primaryId = pickerEntries?.firstOrNull { it.primary }?.id
+            pickerChecked.clear()
+            pickerChecked += CalendarSelection.toggleChecked(pickerChecked, entry.id, primaryId)
+            pickerToggles.forEach { (id, sw) -> sw.isChecked = id in pickerChecked }
+            calendarRepo.saveSelectedCalendarIds(pickerSlot, pickerChecked.toSet())
+            onChanged(SettingsChange.CALENDAR_AUTH)
         }
         return row
     }
