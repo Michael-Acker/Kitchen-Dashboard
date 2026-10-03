@@ -110,36 +110,38 @@ use the manual aapt2/kotlinc/D8 pipeline. Full toolchain notes live in
   sufficient. A "Process system isn't responding" ANR from emulator slowness
   is benign; dismiss it and continue.
 
-## 6. Deployment
+## 6. Deployment (GitHub Releases — standing since 2026-10-02)
 
-1. **Upload** the APK to Muse built-in storage:
-   `/opt/hatch/bin/remote-storage upload-file --path ~/workspace/<file>`
-   → a Muse link with an expiry timestamp. Note the expiry when reporting;
-   anyone with the link can access the file.
-2. **Hash-verify:** download the Muse link back and compare SHA-256 against
-   the local APK. Must be byte-identical before proceeding.
-3. **Downloader code:** create exactly one fresh 7-digit code at
-   `go.aftvnews.com` pointing at the Muse URL. Standing permission: solve
-   CAPTCHAs yourself (the browser's stored CAPTCHA preference covers this
-   flow). Known flakiness: the "URL seems unreachable" warning page — check
-   its reCAPTCHA box, then "Shorten Anyway".
-4. **Verify the redirect:** `curl` the `https://aftv.news/<code>` URL and
-   confirm it resolves to the Muse URL (independently, not just the
-   site's preview page).
-5. **Report:** versionCode/versionName, size, SHA-256, Muse URL (+ expiry),
-   Downloader code, and the verification summary.
-6. New code supersedes the old — old codes must not be reused.
+1. **Stage the release binary:** copy the signed prod APK to
+   `kitchen-dashboard.apk` at the root of the `release-assets` orphan
+   branch (also copy `.github/workflows/release.yml` there — the workflow
+   runs from the tagged commit). Commit.
+2. **Tag and push:** `git tag release-<versionCode>` (e.g. `release-36`),
+   then `git push origin release-assets` and `git push origin release-36`.
+   The deploy key covers this — no tokens. The `release.yml` workflow then
+   publishes a GitHub Release with the APK attached under the CONSTANT
+   asset name `kitchen-dashboard.apk`.
+3. **Verify the static link:** download
+   `https://github.com/Michael-Acker/Kitchen-Dashboard/releases/latest/download/kitchen-dashboard.apk`
+   back and compare SHA-256 against the local APK. Must be byte-identical.
+   This permalink always serves the newest build — it never changes.
+4. **Report:** versionCode/versionName, size, SHA-256, the release tag, and
+   the verification summary. No Downloader code, no Muse upload needed.
+5. The user installs via the Fire TV: type the static GitHub URL (or the
+   in-app updater's saved source) once — the app remembers it.
 
 ## 7. Standing distribution decisions
 
+- GitHub Releases is THE distribution channel (2026-10-02). The
+  AFTVnews Downloader-code flow is RETIRED — no per-build codes, no Muse
+  built-in-storage uploads for distribution. (Retired codes:
+  3923958, 8544206, 6874740, 7174334, 8709565, 9938612, 5587119, 1443525,
+  8742502, 1747183, 8046739, 6023549, 6697184, and the permanent 2520376 —
+  user asked to tear the Downloader flow down 2026-10-02.)
 - No Google Drive / Dropbox (the OAuth grant is full write access to the
   user's entire Drive with no folder-scoped option — rejected outright;
   also untested for direct APK downloads).
-- No Catbox (retired 2026-09-28 — verified unnecessary; the Muse-link flow
-  was the original working one). Muse links expire; the user accepts that
-  tradeoff for simplicity.
-- One fresh Downloader code per build. Codes are public/guessable — fine
-  for an APK, never for access control.
+- No Catbox (retired 2026-09-28 — verified unnecessary).
 - The "Are you still watching?" return-to-home behavior is a Fire OS
   inactivity policy (4h, no interaction), not an app bug. Device fix:
   Settings → Preferences → Data Usage Monitoring → Still Watching → OFF.
