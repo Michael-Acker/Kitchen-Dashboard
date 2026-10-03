@@ -164,6 +164,27 @@ fun main() {
         "no primary id and empty result stays empty (resolves downstream)",
         CalendarSelection.toggleChecked(setOf("f"), "f", null).isEmpty()
     )
+    // Regression (2026-10-02): the tap handler cleared the checked set
+    // BEFORE calling toggleChecked, so only one calendar could ever stay
+    // selected. The pure function composes correctly across successive
+    // toggles — pin that here.
+    check(
+        "successive toggles accumulate",
+        run {
+            var checked = setOf("p")
+            checked = CalendarSelection.toggleChecked(checked, "f", "p")
+            checked = CalendarSelection.toggleChecked(checked, "g", "p")
+            checked == setOf("p", "f", "g")
+        }
+    )
+    check(
+        "toggling one off keeps the others",
+        run {
+            var checked = setOf("p", "f", "g")
+            checked = CalendarSelection.toggleChecked(checked, "f", "p")
+            checked == setOf("p", "g")
+        }
+    )
 
     if (failures > 0) {
         println("$failures FAILURE(S)")

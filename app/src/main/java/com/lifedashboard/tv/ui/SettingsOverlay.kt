@@ -685,8 +685,9 @@ class SettingsOverlay(
             // and the buttons were clipped away, so toggles could never be
             // saved. 2026-10-02.)
             val primaryId = pickerEntries?.firstOrNull { it.primary }?.id
+            val updated = CalendarSelection.toggleChecked(pickerChecked.toSet(), entry.id, primaryId)
             pickerChecked.clear()
-            pickerChecked += CalendarSelection.toggleChecked(pickerChecked, entry.id, primaryId)
+            pickerChecked += updated
             pickerToggles.forEach { (id, sw) -> sw.isChecked = id in pickerChecked }
             calendarRepo.saveSelectedCalendarIds(pickerSlot, pickerChecked.toSet())
             onChanged(SettingsChange.CALENDAR_AUTH)
