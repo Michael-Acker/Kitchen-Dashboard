@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.lifedashboard.tv.util.AppLog
 
 /**
  * EncryptedSharedPreferences-backed credential store. File name is
@@ -127,17 +128,32 @@ class TokenStore(context: Context) {
 
     /**
      * Calendar ids the user checked for this slot, or null when never
-     * picked (meaning: primary calendar only). A defensive copy — the
-     * SharedPreferences string-set must never escape mutable.
+     * picked (meaning: primary calendar only).
+     *
+     * Stored as a single comma-joined string (see
+     * [CalendarSelection.serializeIds]) — the EncryptedSharedPreferences
+     * string-set round-trip silently dropped selections on-device, while
+     * plain strings use the same mechanism as the working token storage.
+     * Falls back to the legacy string-set key (build 34) for migration.
      */
-    fun getSelectedCalendarIds(slot: Int): Set<String>? =
-        prefs.getStringSet(slotKey(slot, KEY_SELECTED_CALENDARS), null)?.toSet()
+    fun getSelectedCalendarIds(slot: Int): Set<String>? {
+        prefs.getString(slotKey(slot, KEY_SELECTED_CALENDARS), null)?.let {
+            return CalendarSelection.parseIds(it)
+        }
+        return prefs.getStringSet(slotKey(slot, KEY_SELECTED_CALENDARS), null)?.toSet()
+    }
 
     /** Persists the picker selection. An empty set means primary only. */
     fun saveSelectedCalendarIds(slot: Int, ids: Set<String>) {
-        prefs.edit()
-            .putStringSet(slotKey(slot, KEY_SELECTED_CALENDARS), ids.toSet())
-            .apply()
+        val raw = CalendarSelection.serializeIds(ids)
+        val editor = prefs.edit()
+        if (raw.isEmpty()) {
+            editor.remove(slotKey(slot, KEY_SELECTED_CALENDARS))
+        } else {
+            editor.putString(slotKey(slot, KEY_SELECTED_CALENDARS), raw)
+        }
+        editor.apply()
+        AppLog.log("Calendar", "slot $slot saved ${ids.size} calendar(s)")
     }
 
     // ------------------------------------------------------------------

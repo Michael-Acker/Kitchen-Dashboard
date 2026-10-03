@@ -7,6 +7,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.lifedashboard.tv.data.CalendarEventDays
 import com.lifedashboard.tv.data.CalendarRepo
 import com.lifedashboard.tv.data.CalendarWindow
 import com.lifedashboard.tv.model.CalendarEvent
@@ -296,11 +297,14 @@ class CalendarWidgetView(
         }
         // The whole displayed week stays populated all day: today's agenda
         // lists ALL of today's events, including ones that already ended
-        // (the fetch is window-anchored, so past events are in the data).
+        // (the fetch is window-anchored, so past events are in the data)
+        // and multi-day events spanning today, shown as all-day rows —
+        // the same expansion the 8-day strip uses, so the two can never
+        // disagree about what occupies today. All-day rows float first,
+        // matching calendar convention; the rest stay in start order.
         val today = LocalDate.now()
-        val todays = events
-            .filter { it.start.toLocalDate() == today }
-            .sortedBy { it.start }
+        val todays = CalendarEventDays.eventsOnDate(today, events)
+            .sortedWith(compareBy({ !it.allDay }, { it.start }))
 
         val headerView = header("Calendar",
             if (todays.isEmpty()) "nothing today" else "${todays.size} today")
@@ -442,29 +446,15 @@ class CalendarWidgetView(
      * Height of the tallest day column when showing ALL of that day's
      * events (no truncation). This is the weekly view's desired height.
      */
-    /**
-     * Events occurring on [date] for the 8-day strip. Multi-day events are
-     * expanded to every day they span and treated as all-day (no time shown).
-     * An event ending exactly at midnight does not occupy its end date.
-     */
-    private fun eventsForDay(date: LocalDate, events: List<CalendarEvent>): List<CalendarEvent> {
-        return events.mapNotNull { e ->
-            val startDate = e.start.toLocalDate()
-            var endDate = e.end.toLocalDate()
-            if (e.end.toLocalTime() == LocalTime.MIDNIGHT) {
-                endDate = endDate.minusDays(1)
-            }
-            if (date < startDate || date > endDate) return@mapNotNull null
-            val multiDay = startDate != endDate
-            if (multiDay && !e.allDay) e.copy(allDay = true) else e
-        }.sortedBy { it.start }
-    }
+    // eventsForDay lives in CalendarEventDays now (pure + unit-tested);
+    // the strip, the today agenda, and the measurement below all delegate
+    // to it so they can never disagree about what occupies a day.
 
     private fun measureWeeklyDesired(weekStart: LocalDate, events: List<CalendarEvent>): Int {
         var maxH = 0
         for (i in 0..7) {
             val date = weekStart.plusDays(i.toLong())
-            val dayEvents = eventsForDay(date, events)
+            val dayEvents = CalendarEventDays.eventsOnDate(date, events)
             // limit = size → all events shown, no "+more" line.
             maxH = maxOf(maxH, measureH(dayColumn(date, dayEvents, dayEvents.size)))
         }
@@ -492,7 +482,7 @@ class CalendarWidgetView(
         strip.removeAllViews()
         for (i in 0..7) {
             val date = weekStart.plusDays(i.toLong())
-            val dayEvents = eventsForDay(date, events)
+            val dayEvents = CalendarEventDays.eventsOnDate(date, events)
             // Largest limit whose column (including "+n more" when truncated)
             // fits in the pinned column height.
             var limit = dayEvents.size

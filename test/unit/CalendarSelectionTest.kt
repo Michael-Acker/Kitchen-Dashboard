@@ -103,6 +103,44 @@ fun main() {
         primaryUrl.contains("/calendars/primary/events")
     )
 
+    // --- serializeIds / parseIds: comma-joined string storage ---
+    // (2026-10-02: putStringSet/getStringSet on EncryptedSharedPreferences
+    // silently dropped selections on-device, so the selection persists as
+    // a plain string — the same mechanism the working token storage uses.)
+    check(
+        "ids round-trip through the string form",
+        CalendarSelection.parseIds(
+            CalendarSelection.serializeIds(setOf("a@gmail.com", "family123"))
+        ) == setOf("a@gmail.com", "family123")
+    )
+    check(
+        "empty set serializes to empty string",
+        CalendarSelection.serializeIds(emptySet()) == ""
+    )
+    check(
+        "null parses to null (never picked = primary only)",
+        CalendarSelection.parseIds(null) == null
+    )
+    check(
+        "empty string parses to empty set",
+        CalendarSelection.parseIds("") == emptySet<String>()
+    )
+    check(
+        "blank entries are dropped on both ends",
+        CalendarSelection.parseIds("a,,b") == setOf("a", "b") &&
+            CalendarSelection.serializeIds(setOf("a", "  ")) == "a"
+    )
+    check(
+        "entries are trimmed",
+        CalendarSelection.parseIds(" a , b ") == setOf("a", "b")
+    )
+    check(
+        "a real holiday calendar id survives the round trip",
+        CalendarSelection.parseIds(
+            CalendarSelection.serializeIds(setOf("en.usa#holiday@group.v.calendar.google.com"))
+        ) == setOf("en.usa#holiday@group.v.calendar.google.com")
+    )
+
     if (failures > 0) {
         println("$failures FAILURE(S)")
         kotlin.system.exitProcess(1)

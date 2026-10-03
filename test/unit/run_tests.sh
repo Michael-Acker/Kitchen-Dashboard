@@ -31,6 +31,7 @@ echo "=== compiling unit tests ==="
   test/unit/WeatherRoleColorsTest.kt \
   test/unit/CalendarWindowTest.kt \
   test/unit/CalendarSelectionTest.kt \
+  test/unit/CalendarEventDaysTest.kt \
   test/unit/stubs/android/graphics/Color.kt \
   "$SRC/DayNight.kt" \
   "$SRC/Theme.kt" \
@@ -41,9 +42,11 @@ echo "=== compiling unit tests ==="
   app/src/main/java/com/lifedashboard/tv/ui/RefreshLogic.kt \
   app/src/main/java/com/lifedashboard/tv/data/CalendarWindow.kt \
   app/src/main/java/com/lifedashboard/tv/data/CalendarSelection.kt \
+  app/src/main/java/com/lifedashboard/tv/data/CalendarEventDays.kt \
+  app/src/main/java/com/lifedashboard/tv/model/Models.kt \
   -d "$OUT"
 
-for t in DayNightTest RefreshLogicTest ThemeSelectionTest ThemeAuditTest ManifestTest WeatherRoleColorsTest CalendarWindowTest CalendarSelectionTest; do
+for t in DayNightTest RefreshLogicTest ThemeSelectionTest ThemeAuditTest ManifestTest WeatherRoleColorsTest CalendarWindowTest CalendarSelectionTest CalendarEventDaysTest; do
   echo "=== running $t ==="
   java -cp "$OUT:$STDLIB" "com.lifedashboard.tv.test.${t}Kt"
 done

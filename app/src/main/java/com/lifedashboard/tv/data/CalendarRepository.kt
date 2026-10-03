@@ -186,6 +186,10 @@ class CalendarRepository(private val context: Context) : CalendarRepo {
                 val calendarIds = CalendarSelection.resolveIdsToFetch(
                     store.getSelectedCalendarIds(slot)
                 )
+                AppLog.log(
+                    "Calendar",
+                    "slot $slot ($accountName): fetching ${calendarIds.size} calendar(s)"
+                )
                 for (calendarId in calendarIds) {
                     try {
                         merged += fetchEvents(token, slot.toString(), accountName, calendarId)

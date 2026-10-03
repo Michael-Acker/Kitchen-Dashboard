@@ -70,4 +70,25 @@ object CalendarSelection {
             "?timeMin=$encodedTimeMin&timeMax=$encodedTimeMax" +
             "&singleEvents=true&orderBy=startTime&maxResults=100"
     }
+
+    /**
+     * Serializes a calendar-id selection for storage as a single
+     * comma-joined string — deliberately NOT putStringSet: the
+     * EncryptedSharedPreferences string-set round-trip silently dropped
+     * selections on-device (2026-10-02), while plain strings are the same
+     * mechanism the working token storage uses. Calendar ids never
+     * contain commas. Blanks are dropped; the result may be "".
+     */
+    fun serializeIds(ids: Set<String>): String =
+        ids.filter { it.isNotBlank() }.distinct().joinToString(",")
+
+    /**
+     * Parses a stored selection. Null (never saved) stays null = primary
+     * only; "" or all-blank parses to an empty set, which also resolves
+     * to primary-only downstream.
+     */
+    fun parseIds(raw: String?): Set<String>? {
+        if (raw == null) return null
+        return raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    }
 }
