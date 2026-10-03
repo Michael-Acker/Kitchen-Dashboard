@@ -1,0 +1,44 @@
+name: Publish release
+
+# Pushing a tag like `release-36` publishes a GitHub Release with the APK
+# attached under a CONSTANT asset name, so the permalink
+#   https://github.com/Michael-Acker/Kitchen-Dashboard/releases/latest/download/kitchen-dashboard.apk
+# always serves the newest build. No tokens needed: the tag is pushed with
+# the repo deploy key, and the workflow uses its own GITHUB_TOKEN.
+#
+# The tag must point at a commit on the `release-assets` branch containing
+# `kitchen-dashboard.apk` at the repo root (built by the manual pipeline;
+# see BUILD_AND_DEPLOY.md). That keeps release binaries out of main.
+
+on:
+  push:
+    tags:
+      - 'release-*'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out tagged commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Create GitHub Release with APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          BUILD="${TAG#release-}"
+          if [ ! -f kitchen-dashboard.apk ]; then
+            echo "kitchen-dashboard.apk not found in tagged commit" >&2
+            exit 1
+          fi
+          gh release create "$TAG" \
+            --title "Kitchen Dashboard build $BUILD" \
+            --notes "Install on Fire TV via the Downloader app, or download kitchen-dashboard.apk directly. The permalink https://github.com/Michael-Acker/Kitchen-Dashboard/releases/latest/download/kitchen-dashboard.apk always serves the newest build." \
+            kitchen-dashboard.apk
