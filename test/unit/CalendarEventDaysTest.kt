@@ -100,6 +100,28 @@ fun main() {
         CalendarEventDays.eventsOnDate(fri.plusDays(9), events).isEmpty()
     )
 
+    // Regression (2026-10-02): a Sat 7-9pm EDT event arriving from Google
+    // as 23:00Z-01:00Z was treated as spanning two UTC dates and shown on
+    // Sunday too. Day math must use the display zone, not the event's zone.
+    val ny = ZoneId.of("America/New_York")
+    val dukeUtc = ev(
+        "Duke University M",
+        ZonedDateTime.parse("2026-10-03T23:00:00Z"),
+        ZonedDateTime.parse("2026-10-04T01:00:00Z")
+    )
+    check(
+        "UTC evening event appears only on its local day",
+        "Duke University M" in CalendarEventDays.eventsOnDate(fri.plusDays(1), listOf(dukeUtc), ny)
+            .map { it.title } &&
+            "Duke University M" !in CalendarEventDays.eventsOnDate(fri.plusDays(2), listOf(dukeUtc), ny)
+            .map { it.title }
+    )
+    check(
+        "UTC evening event is not marked all-day",
+        !CalendarEventDays.eventsOnDate(fri.plusDays(1), listOf(dukeUtc), ny)
+            .first { it.title == "Duke University M" }.allDay
+    )
+
     if (failures > 0) {
         println("$failures FAILURE(S)")
         kotlin.system.exitProcess(1)

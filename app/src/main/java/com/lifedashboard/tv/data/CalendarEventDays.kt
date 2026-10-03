@@ -3,6 +3,7 @@ package com.lifedashboard.tv.data
 import com.lifedashboard.tv.model.CalendarEvent
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 
 /**
  * Pure date-mapping for calendar events (2026-10-02).
@@ -21,12 +22,20 @@ object CalendarEventDays {
      * all-day (no time shown) — a "Beach week" trip shows as an all-day row
      * on each day it covers, including today. An event ending exactly at
      * midnight does not occupy its end date.
+     *
+     * Event times are normalized to [zone] (default: system) before the
+     * day math: a 7-9pm EDT event arriving as 23:00Z-01:00Z must not leak
+     * onto the next day just because UTC rolled over (2026-10-02).
      */
-    fun eventsOnDate(date: LocalDate, events: List<CalendarEvent>): List<CalendarEvent> {
+    fun eventsOnDate(
+        date: LocalDate,
+        events: List<CalendarEvent>,
+        zone: ZoneId = ZoneId.systemDefault()
+    ): List<CalendarEvent> {
         return events.mapNotNull { e ->
-            val startDate = e.start.toLocalDate()
-            var endDate = e.end.toLocalDate()
-            if (e.end.toLocalTime() == LocalTime.MIDNIGHT) {
+            val startDate = e.start.withZoneSameInstant(zone).toLocalDate()
+            var endDate = e.end.withZoneSameInstant(zone).toLocalDate()
+            if (e.end.withZoneSameInstant(zone).toLocalTime() == LocalTime.MIDNIGHT) {
                 endDate = endDate.minusDays(1)
             }
             if (date < startDate || date > endDate) return@mapNotNull null

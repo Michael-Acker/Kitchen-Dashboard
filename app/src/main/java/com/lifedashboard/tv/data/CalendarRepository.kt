@@ -409,6 +409,11 @@ class CalendarRepository(private val context: Context) : CalendarRepo {
     /**
      * Google returns either start.dateTime ("2026-09-25T10:00:00-04:00") or
      * start.date ("2026-09-26", all-day; end date is exclusive).
+     *
+     * Timed events are normalized to the system zone on parse: Google may
+     * return times in UTC (or any zone), and a 7-9pm EDT event is
+     * 23:00Z-01:00Z — without normalization the end date falls on the next
+     * day and the event leaks onto it (2026-10-02).
      */
     private fun parseEventTime(obj: JSONObject, allDay: Boolean): ZonedDateTime? {
         return try {
@@ -421,7 +426,7 @@ class CalendarRepository(private val context: Context) : CalendarRepo {
             } else {
                 val dateTime = obj.optString("dateTime", "")
                     .takeIf { it.isNotBlank() } ?: return null
-                ZonedDateTime.parse(dateTime)
+                ZonedDateTime.parse(dateTime).withZoneSameInstant(ZoneId.systemDefault())
             }
         } catch (e: Exception) {
             null
